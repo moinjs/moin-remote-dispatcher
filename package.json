@@ -1,0 +1,30 @@
+{
+  "name": "moin-remote-dispatcher",
+  "description": "Events over socket.io for the Moin System",
+  "keywords": [
+    "events",
+    "remote",
+    "moin"
+  ],
+  "author": "Torben Hartmann",
+  "homapage": "http://moinjs.github.io/",
+  "license": "MIT",
+  "repository": "moinjs/moin-remote-dispatcher",
+  "engines": {
+    "node": ">=6.0"
+  },
+  "version": "1.0.0",
+  "moin": {
+    "type": "module",
+    "settings":{
+      "mode":"dynamic",
+      "port":2987,
+      "host":"127.0.0.1"
+    }
+  },
+  "dependencies": {
+    "hat": "0.0.3",
+    "socket.io": "^1.4.8",
+    "socket.io-client": "^1.4.8"
+  }
+}
