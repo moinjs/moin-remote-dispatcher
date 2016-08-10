@@ -1,4 +1,3 @@
-
 module.exports = function (moin, settings) {
 
 
@@ -16,7 +15,7 @@ module.exports = function (moin, settings) {
 
     let mode = null;
 
-    function registerHandler(id, socket) {
+    function registerHandler(id, socket, onDC = null) {
         let handler = moin.registerEventHandler((event, bestMatch = false)=> {
             if (event._source == id) {
                 return bestMatch ? {id: null, score: -1} : [];
@@ -66,17 +65,15 @@ module.exports = function (moin, settings) {
 
         socket.on("event.collect", collect);
         socket.on("event.exec", exec);
-
-        socket.on("disconnect", ()=> {
+        let dc = ()=> {
             socket.removeListener("event.collect", collect);
             socket.removeListener("event.exec", exec);
+            socket.removeListener("disconnect", dc);
             moin.removeEventHandler(handler);
-        });
-
+            if (onDC != null)onDC();
+        };
+        socket.on("disconnect", dc);
     }
-
-    //moin.collectEventHandlerIds;
-    //moin.execEventHandlerById;
 
     moin.registerMethod("connect", (url)=> {
         if (mode != null)return Promise.reject("Connection already open");
@@ -85,10 +82,7 @@ module.exports = function (moin, settings) {
             socket.on("me", (id)=> {
                 logger.info("Connected to Server:", id);
                 socket.emit("me", me);
-                registerHandler(id, socket);
-            });
-            socket.on('disconnect', function () {
-
+                registerHandler(id, socket, ()=>logger.info("Disconnected from Server: " + id));
             });
         });
     });
@@ -100,7 +94,7 @@ module.exports = function (moin, settings) {
                 socket.emit("me", me);
                 socket.on("me", id=> {
                     logger.info("Client connected: " + id);
-                    registerHandler(id, socket);
+                    registerHandler(id, socket, ()=>logger.info("Client disconnected: " + id));
                 });
             });
             io.listen(port);
