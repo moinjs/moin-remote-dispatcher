@@ -13,13 +13,13 @@
   "engines": {
     "node": ">=6.0"
   },
-  "version": "1.0.0",
+  "version": "1.0.1",
   "moin": {
     "type": "module",
-    "settings":{
-      "mode":"dynamic",
-      "port":2987,
-      "host":"127.0.0.1"
+    "settings": {
+      "mode": "dynamic",
+      "port": 2987,
+      "host": "127.0.0.1"
     }
   },
   "dependencies": {
