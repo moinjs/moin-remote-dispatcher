@@ -8,28 +8,37 @@ module.exports = function (moin, settings) {
         return;
     }
 
-    const me = require("hat")();
+    let me = "";
+    if (settings.id.length > 0) {
+        me = settings.id;
+    } else {
+        me = require("hat")();
+    }
+
+    var io = null;
+
+    let isServer = false;
+    let mode = null;
     let connections = new Map();
 
-    let time = 0;
-
-    let mode = null;
-
     function registerHandler(id, socket, onDC = null) {
+        if (isServer)connections.set(id, socket);
         let handler = moin.registerEventHandler((event, bestMatch = false)=> {
             if (event._source == id) {
                 return bestMatch ? {id: null, score: -1} : [];
             } else {
+                let eventCopy = Object.assign({}, event);
                 return new Promise((resolve, reject)=> {
-                    event._source = me;
-                    socket.emit("event.collect", {event, bestMatch}, (handler)=> {
+                    eventCopy._source = me;
+                    socket.emit("event.collect", {event: eventCopy, bestMatch}, (handler)=> {
                         if (bestMatch) {
                             if (handler.score != -1) {
                                 handler.id = "net:" + id + ":" + handler.id;
                             }
                         } else {
                             handler = handler.map((h)=> {
-                                h.id = "net:" + id + ":" + h.id;
+                                let test = h.split(":");
+                                if (test.length == 1)h = "net:" + id + ":" + h
                                 return h;
                             });
                         }
@@ -39,10 +48,17 @@ module.exports = function (moin, settings) {
             }
         }, (check)=> {
             let [net,socketId,hId] = check.split(":");
-            logger.info(net, socketId, id);
-            if (net == "net" && socketId == id) {
-                return (event)=>new Promise((resolve, reject)=> {
-                    socket.emit("event.exec", {id: hId, event}, function (res) {
+            if (net == "net") {
+                if (!isServer) {
+                    if (socketId == id)check = hId;
+                } else if (isServer && socketId == id) {
+                    check = hId;
+                }
+                return (event)=> new Promise((resolve, reject)=> {
+                    socket.emit("event.exec", {id: check, event}, function (res) {
+                        if (res == null) {
+                            return reject("No Answer from remote Instance");
+                        }
                         if (res.state == 1) {
                             resolve(res.value);
                         } else {
@@ -54,13 +70,20 @@ module.exports = function (moin, settings) {
         });
 
         let collect = ({event,bestMatch}, callback)=> {
-            moin.collectEventHandlerIds(event, bestMatch).then(callback);
+            moin.collectEventHandlerIds(event, bestMatch).then((data)=> {
+                callback(data);
+            });
         };
 
         let exec = ({event,id}, callback)=> {
-            moin.execEventHandlerById(id, event).then((data)=> {
-                callback(data);
-            });
+            let [net,socketId,hId] = id.split(":");
+            if (isServer && net == "net") {
+                connections.get(socketId).emit("event.exec", {id: hId, event}, callback);
+            } else {
+                moin.execEventHandlerById(id, event).then((data)=> {
+                    callback(data);
+                });
+            }
         };
 
         socket.on("event.collect", collect);
@@ -69,6 +92,7 @@ module.exports = function (moin, settings) {
             socket.removeListener("event.collect", collect);
             socket.removeListener("event.exec", exec);
             socket.removeListener("disconnect", dc);
+            connections.delete(id);
             moin.removeEventHandler(handler);
             if (onDC != null)onDC();
         };
@@ -87,9 +111,10 @@ module.exports = function (moin, settings) {
         });
     });
     moin.registerMethod("listen", (port)=> {
+        isServer = true;
         if (mode != null)return Promise.reject("Connection already open");
         return new Promise((resolve, reject)=> {
-            var io = require('socket.io')();
+            io = require('socket.io')();
             io.on('connection', function (socket) {
                 socket.emit("me", me);
                 socket.on("me", id=> {
