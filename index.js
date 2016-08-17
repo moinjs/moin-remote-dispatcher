@@ -15,6 +15,8 @@ module.exports = function (moin, settings) {
         me = require("hat")();
     }
 
+    const token = settings.token;
+
     var io = null;
 
     let isServer = false;
@@ -103,10 +105,15 @@ module.exports = function (moin, settings) {
         if (mode != null)return Promise.reject("Connection already open");
         return new Promise((resolve, reject)=> {
             var socket = require('socket.io-client')(url);
+            socket.on("auth_error", ()=> {
+                logger.error("Invalid token");
+            });
             socket.on("me", (id)=> {
                 logger.info("Connected to Server:", id);
-                socket.emit("me", me);
                 registerHandler(id, socket, ()=>logger.info("Disconnected from Server: " + id));
+            });
+            socket.on("hello", ()=> {
+                socket.emit("me", {id: me, token});
             });
         });
     });
@@ -116,10 +123,17 @@ module.exports = function (moin, settings) {
         return new Promise((resolve, reject)=> {
             io = require('socket.io')();
             io.on('connection', function (socket) {
-                socket.emit("me", me);
-                socket.on("me", id=> {
-                    logger.info("Client connected: " + id);
-                    registerHandler(id, socket, ()=>logger.info("Client disconnected: " + id));
+                socket.emit("hello");
+                socket.on("me", (data)=> {
+                    if (data.token == token) {
+                        logger.info("Client connected: " + data.id);
+                        socket.emit("me", me);
+                        registerHandler(data.id, socket, ()=>logger.info("Client disconnected: " + data.id));
+                    } else {
+                        socket.emit("auth_error");
+                        logger.warn("Client not authed: " + data.id);
+                        socket.disconnect();
+                    }
                 });
             });
             io.listen(port);
